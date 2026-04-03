@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KhataPro Cloud | Digital Udhar Ledger</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+    </style>
+</head>
+<body class="bg-slate-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // --- CONFIGURATION: REPLACE THESE ---
+        const SUPABASE_URL = 'YOUR_SUPABASE_PROJECT_URL';
+        const SUPABASE_KEY = 'YOUR_SUPABASE_ANON_KEY';
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        const App = () => {
+            const [customers, setCustomers] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [view, setView] = useState('dashboard');
+            const [selectedCustId, setSelectedCustId] = useState(null);
+
+            // Fetch Data from Supabase
+            useEffect(() => {
+                fetchData();
+            }, []);
+
+            async function fetchData() {
+                setLoading(true);
+                // Fetch customers and their transactions in one go
+                const { data, error } = await supabase
+                    .from('customers')
+                    .select('*, transactions(*)');
+                
+                if (error) console.error(error);
+                else setCustomers(data || []);
+                setLoading(false);
+            }
+
+            const addCustomer = async (name, phone) => {
+                const { data, error } = await supabase
+                    .from('customers')
+                    .insert([{ name, phone }])
+                    .select();
+                
+                if (error) alert("Error adding customer");
+                else {
+                    await fetchData();
+                    setView('dashboard');
+                }
+            };
+
+            const addTransaction = async (customerId, type, amount, note) => {
+                const { error } = await supabase
+                    .from('transactions')
+                    .insert([{ customer_id: customerId, type, amount, note }]);
+                
+                if (error) alert("Error recording transaction");
+                else fetchData();
+            };
+
+            const totals = useMemo(() => {
+                return customers.reduce((acc, curr) => {
+                    const balance = curr.transactions?.reduce((s, t) => t.type === 'CREDIT' ? s + t.amount : s - t.amount, 0) || 0;
+                    return acc + balance;
+                }, 0);
+            }, [customers]);
+
+            const selectedCustomer = customers.find(c => c.id === selectedCustId);
+
+            if (loading) return <div class="h-screen flex items-center justify-center font-bold text-indigo-600">Loading Khata...</div>;
+
+            return (
+                <div class="max-w-md mx-auto min-h-screen flex flex-col pb-20">
+                    <header class="bg-indigo-700 text-white p-6 rounded-b-3xl shadow-lg">
+                        <div class="flex justify-between items-center mb-4">
+                            <h1 class="text-2xl font-bold">KhataPro</h1>
+                            <button onClick={() => setView('add')} class="bg-white/20 p-2 rounded-full"><i data-lucide="user-plus"></i></button>
+                        </div>
+                        <div class="bg-white/10 p-4 rounded-2xl">
+                            <p class="text-indigo-100 text-xs uppercase font-semibold">Total Udhar</p>
+                            <h2 class="text-3xl font-bold">₹ {totals.toLocaleString()}</h2>
+                        </div>
+                    </header>
+
+                    <main class="flex-1 p-4">
+                        {view === 'dashboard' && (
+                            <div class="space-y-4">
+                                {customers.map(cust => {
+                                    const balance = cust.transactions?.reduce((s, t) => t.type === 'CREDIT' ? s + Number(t.amount) : s - Number(t.amount), 0) || 0;
+                                    return (
+                                        <div key={cust.id} onClick={() => { setSelectedCustId(cust.id); setView('detail'); }} class="bg-white p-4 rounded-2xl shadow-sm border flex justify-between items-center">
+                                            <div><h3 class="font-bold">{cust.name}</h3><p class="text-sm text-gray-500">{cust.phone}</p></div>
+                                            <div class="text-right">
+                                                <p class={`font-bold ${balance > 0 ? 'text-red-500' : 'text-emerald-500'}`}>₹ {balance}</p>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
+
+                        {view === 'detail' && selectedCustomer && (
+                            <CustomerDetail 
+                                customer={selectedCustomer} 
+                                onBack={() => setView('dashboard')} 
+                                onAddTx={addTransaction}
+                            />
+                        )}
+
+                        {view === 'add' && (
+                            <AddCustomer onBack={() => setView('dashboard')} onSave={addCustomer} />
+                        )}
+                    </main>
+                </div>
+            );
+        };
+
+        const CustomerDetail = ({ customer, onBack, onAddTx }) => {
+            const balance = customer.transactions?.reduce((s, t) => t.type === 'CREDIT' ? s + Number(t.amount) : s - Number(t.amount), 0) || 0;
+            
+            const handleTx = async (type) => {
+                const amt = prompt(`Enter ${type} amount:`);
+                if (!amt || isNaN(amt)) return;
+                const note = prompt("Note?");
+                await onAddTx(customer.id, type, amt, note);
+            };
+
+            const sendWhatsApp = () => {
+                const msg = `Dear ${customer.name}, your balance is ₹${balance}.`;
+                window.open(`https://wa.me/${customer.phone}?text=${encodeURIComponent(msg)}`);
+            };
+
+            return (
+                <div>
+                    <button onClick={onBack} class="mb-4 text-indigo-600 font-bold">← Back</button>
+                    <div class="bg-white p-6 rounded-3xl shadow-sm mb-4">
+                        <h2 class="text-2xl font-bold">{customer.name}</h2>
+                        <p class="text-red-500 font-bold text-xl mt-2">Balance: ₹{balance}</p>
+                        <div class="flex gap-2 mt-4">
+                            <button onClick={() => handleTx('CREDIT')} class="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold">+ Udhar</button>
+                            <button onClick={() => handleTx('PAYMENT')} class="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold">- Paid</button>
+                            <button onClick={sendWhatsApp} class="bg-green-500 text-white p-3 rounded-xl"><i data-lucide="message-circle"></i></button>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        {customer.transactions?.map(t => (
+                            <div key={t.id} class="bg-white p-3 rounded-xl flex justify-between border">
+                                <span>{t.note || t.type}</span>
+                                <span class={t.type === 'CREDIT' ? 'text-red-500 font-bold' : 'text-emerald-500 font-bold'}>₹{t.amount}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        const AddCustomer = ({ onBack, onSave }) => {
+            const [n, setN] = useState('');
+            const [p, setP] = useState('');
+            return (
+                <div class="bg-white p-6 rounded-3xl shadow-lg">
+                    <input type="text" placeholder="Name" class="w-full p-4 mb-2 bg-gray-50 rounded-xl" onChange={e => setN(e.target.value)} />
+                    <input type="text" placeholder="Phone (91...)" class="w-full p-4 mb-4 bg-gray-50 rounded-xl" onChange={e => setP(e.target.value)} />
+                    <button onClick={() => onSave(n, p)} class="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold">Add Customer</button>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+        setTimeout(() => lucide.createIcons(), 1000);
+    </script>
+</body>
+</html>
