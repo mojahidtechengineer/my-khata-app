@@ -23,22 +23,6 @@
 
     <script type="text/babel">
 
-        if (isLocked) {
-    return (
-        <div class="h-screen flex flex-col items-center justify-center bg-indigo-700 p-10 text-white">
-            <h1 class="text-2xl font-bold mb-4">KhataPro Locked</h1>
-            <input 
-                type="password" 
-                placeholder="Enter Shop PIN" 
-                class="p-4 rounded-xl text-black text-center w-full"
-                onChange={(e) => {
-                    if(e.target.value === CORRECT_PIN) setIsLocked(false);
-                }}
-            />
-            <p class="mt-4 text-xs opacity-70">Contact [Your Name] for Access</p>
-        </div>
-    );
-}
 
         
 const [isLocked, setIsLocked] = useState(true);
